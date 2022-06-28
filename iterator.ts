@@ -29,10 +29,14 @@ export const handler: Handler = async () => {
 			if (Body) {
 				const posts: Post[] = JSON.parse(Body.toString());
 				console.log('posts: line 28', posts.length);
-				const postToProcess = posts.shift();
+				const postToProcess = posts.splice(0, 20);
 				if (postToProcess) {
-					postToProcess.title = voca.titleCase(postToProcess.title);
-					obj.response = `Updated to ${postToProcess.title}`;
+					postToProcess.forEach((post) => {
+						post.title = voca.titleCase(post.title);
+					});
+					obj.response = `Updated titles to ${postToProcess
+						.map(({ title }) => title)
+						.join(', ')}`;
 				}
 				if (posts.length) {
 					obj.continue = true;
