@@ -1,0 +1,133 @@
+service: mthstepfunctions
+
+frameworkVersion: 2 || 3
+
+plugins:
+  - serverless-step-functions
+  - serverless-esbuild
+  - serverless-pseudo-parameters
+
+custom:
+  esbuild:
+    bundle: true
+    minify: false
+  storageBucket:
+    name: ${self:service}-${opt:stage, 'dev'}-storage-bucket
+
+resources:
+  Resources:
+    StorageBucket:
+      Type: AWS::S3::Bucket
+      Properties:
+        BucketName: ${self:custom.storageBucket.name}
+    StorageBucketPolicy:
+      Type: AWS::S3::BucketPolicy
+      Properties:
+        Bucket: !Ref StorageBucket
+        PolicyDocument:
+          Statement:
+            Effect: Allow
+            Principal: '*'
+            Action:
+              - s3:GetObject
+              - s3:PutObject
+            Resource: arn:aws:s3:::${self:custom.storageBucket.name}/*
+
+provider:
+  name: aws
+  runtime: nodejs14.x
+  stage: ${opt:stage, 'dev'}
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - s3:PutObject
+            - s3:GetObject
+          Resource: 'arn:aws:s3:::${self:custom.storageBucket.name}/*'
+
+functions:
+  getUsers:
+    handler: getUsers.handler
+  processUsers:
+    handler: processUsers.handler
+  processNames:
+    handler: processNames.handler
+  getPosts:
+    handler: getPosts.handler
+    environment:
+      BUCKET: ${self:custom.storageBucket.name}
+      KEY: 'marcus/stuff'
+  iterator:
+    handler: iterator.handler
+    environment:
+      BUCKET: ${self:custom.storageBucket.name}
+      KEY: 'marcus/stuff'
+
+stepFunctions:
+  stateMachines:
+    processName:
+      name: ${self:service}-${opt:stage, 'dev'}-processUserStateMachine
+      definition:
+        Comment: Process User Names
+        StartAt: PROCESS_THE_USER_NAMES
+        States:
+          PROCESS_THE_USER_NAMES:
+            Type: Map
+            Iterator:
+              StartAt: CallLambda
+              States:
+                CallLambda:
+                  Type: Task
+                  Resource: arn:aws:lambda:#{AWS::Region}:#{AWS::AccountId}:function:${self:service}-${opt:stage, 'dev'}-processNames
+                  End: true
+            End: true
+    processUser:
+      name: ${self:service}-${opt:stage, 'dev'}-camelCaseUsersStateMachine
+      definition:
+        Comment: Process User Names
+        StartAt: GET_THE_USERS
+        States:
+          GET_THE_USERS:
+            Type: Task
+            Resource: arn:aws:lambda:#{AWS::Region}:#{AWS::AccountId}:function:${self:service}-${opt:stage, 'dev'}-getUsers
+            Next: PROCESS_THE_USER
+          PROCESS_THE_USER:
+            Type: Map
+            Iterator:
+              StartAt: CallLambda
+              States:
+                CallLambda:
+                  Type: Task
+                  Resource: arn:aws:lambda:#{AWS::Region}:#{AWS::AccountId}:function:${self:service}-${opt:stage, 'dev'}-processUsers
+                  End: true
+            End: true
+    processPosts:
+      name: ${self:service}-${opt:stage, 'dev'}-processposts
+      definition:
+        Comment: Process Posts from S3 Bucket
+        StartAt: GET_THE_POSTS
+        States:
+          GET_THE_POSTS:
+            Type: Task
+            Resource: arn:aws:lambda:#{AWS::Region}:#{AWS::AccountId}:function:${self:service}-${opt:stage, 'dev'}-getPosts
+            Next: Iterator
+          Iterator:
+            Type: Task
+            Resource: arn:aws:lambda:#{AWS::Region}:#{AWS::AccountId}:function:${self:service}-${opt:stage, 'dev'}-iterator
+            OutputPath: $.continue
+            Next: SHOULD_CONTINUE
+          SHOULD_CONTINUE:
+            Type: Choice
+            Choices:
+              - Variable: $
+                BooleanEquals: true
+                Next: EXAMPLE_WORK
+            Default: Done
+          EXAMPLE_WORK:
+            Comment: Keep Going
+            Type: Pass
+            Next: Iterator
+          Done:
+            Type: Pass
+            End: true
