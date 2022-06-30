@@ -115,12 +115,13 @@ stepFunctions:
           Iterator:
             Type: Task
             Resource: arn:aws:lambda:#{AWS::Region}:#{AWS::AccountId}:function:${self:service}-${opt:stage, 'dev'}-iterator
-            OutputPath: $.continue
+            OutputPath: $
             Next: SHOULD_CONTINUE
           SHOULD_CONTINUE:
             Type: Choice
+            OutputPath: $
             Choices:
-              - Variable: $
+              - Variable: $.continue
                 BooleanEquals: true
                 Next: EXAMPLE_WORK
             Default: Done

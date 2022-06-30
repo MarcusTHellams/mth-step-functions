@@ -13,10 +13,28 @@ const { BUCKET, KEY } = process.env;
 
 const s3 = new S3();
 
-export const handler: Handler = async () => {
-	const obj: { continue: boolean; response: string } = {
+export const handler: Handler = async (event) => {
+	console.log(
+		'🚀 ~ file: iterator.ts ~ line 17 ~ consthandler:Handler= ~ event',
+		JSON.stringify(event, null, 2)
+	);
+	let firstTimeRan: boolean = true;
+	if (event.firstTimeRan) {
+		firstTimeRan = event.firstTimeRan;
+	}
+
+	const obj: {
+		continue: boolean;
+		response: string;
+		start: number;
+		end: number;
+		firstTimeRan: boolean;
+	} = {
 		continue: false,
 		response: '',
+		firstTimeRan,
+		start: event?.start || 0,
+		end: event?.end || 20,
 	};
 	try {
 		if (BUCKET && KEY) {
@@ -28,7 +46,6 @@ export const handler: Handler = async () => {
 				.promise();
 			if (Body) {
 				const posts: Post[] = JSON.parse(Body.toString());
-				console.log('posts: line 28', posts.length);
 				const postToProcess = posts.splice(0, 20);
 				if (postToProcess) {
 					postToProcess.forEach((post) => {
@@ -59,5 +76,8 @@ export const handler: Handler = async () => {
 
 		throw error;
 	}
+	obj.start = obj.end;
+	obj.end = obj.end + 20;
+	obj.firstTimeRan = false;
 	return obj;
 };
